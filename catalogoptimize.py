@@ -24,7 +24,34 @@ def optimize_tree(parent, k, v, attr=True):
     result = 0
     before = blen(bucket)
     klass = v.__class__
-    new = klass(v)
+
+    # Fill the tree in a two-step process, which should result in better
+    # fill rates
+    new = klass()
+    count = 0
+    tmp = []
+    if hasattr(v, 'items'):
+        # BTree
+        for kk,vv in v.items():
+            if count % 2 == 0:
+                new[kk] = vv
+            else:
+                tmp.append((kk,vv))
+            count += 1
+    else:
+        # Tree set
+        for kk in v.keys():
+            if count % 2 == 0:
+                new.insert(kk)
+            else:
+                tmp.append(kk)
+            count += 1
+    # Add the rest of the data
+    new.update(tmp)
+
+    # Verify data
+    assert len(v) == len(new)
+
     after = blen(new._firstbucket)
     if after < before:
         if attr:
