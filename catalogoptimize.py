@@ -8,13 +8,17 @@ from Products.ZCTextIndex.ZCTextIndex import ZCTextIndex
 
 
 def blen(bucket):
-    buckets = 0
+    distribution = {}
     while True:
-        buckets += 1
+        bucket_len = len(bucket)
+        if distribution.get(bucket_len, None):
+            distribution[bucket_len] += 1
+        else:
+            distribution[bucket_len] = 1
         bucket = bucket._next
         if bucket is None:
             break
-    return buckets
+    return distribution
 
 
 def optimize_tree(parent, k, v, attr=True):
@@ -22,7 +26,7 @@ def optimize_tree(parent, k, v, attr=True):
     if bucket is None:
         return 0
     result = 0
-    before = blen(bucket)
+    before = sum(blen(bucket).values())
     klass = v.__class__
 
     # Fill the tree in a two-step process, which should result in better
@@ -52,7 +56,8 @@ def optimize_tree(parent, k, v, attr=True):
     # Verify data
     assert len(v) == len(new)
 
-    after = blen(new._firstbucket)
+    after_distribution = blen(new._firstbucket)
+    after = sum(after_distribution.values())
     if after < before:
         if attr:
             setattr(parent, k, new)
@@ -60,6 +65,7 @@ def optimize_tree(parent, k, v, attr=True):
             parent[k] = new
         parent._p_changed = True
         result += before - after
+        print('New buckets: %s' % str(after_distribution))
         transaction.commit()
     else:
         conn = parent._p_jar
