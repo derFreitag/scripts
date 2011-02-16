@@ -1,3 +1,11 @@
+"""
+Run this as a `zopectl run` script via for example:
+
+  $ bin/instance run catalogoptimize.py
+
+Note that it does actual transaction commits.
+"""
+
 import transaction
 from Acquisition import aq_base
 from BTrees.IOBTree import IOBTree
