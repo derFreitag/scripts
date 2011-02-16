@@ -93,6 +93,7 @@ def optimize(obj, no_data=False):
         result += optimize_tree(obj, k, v)
         # handle sets inside *OBTrees
         if isinstance(v, (IOBTree, OOBTree)):
+            obj._p_activate()
             new_v = obj.__dict__[k]
             for k2, v2 in new_v.iteritems():
                 result += optimize_tree(new_v, k2, v2, attr=False)
