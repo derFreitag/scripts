@@ -45,7 +45,9 @@ def optimize_tree(parent, k, v, attr=True):
     if hasattr(v, 'items'):
         # BTree
         for kk,vv in v.items():
-            if count % 2 == 0:
+            # We aim for 90% fill rate to avoid too many immediate splits
+            modcount = count % 9
+            if modcount % 2 == 0:
                 new[kk] = vv
             else:
                 tmp.append((kk,vv))
