@@ -78,7 +78,15 @@ def optimize_tree(parent, k, v, attr=True):
             parent[k] = new
         parent._p_changed = True
         result += before - after
-        print('New buckets {fill size: count}: %s' % str(after_distribution))
+        many_buckets = {}
+        few_buckets = []
+        for k, v in after_distribution.items():
+            if v > 1:
+                many_buckets[k] = v
+            else:
+                few_buckets.append(k)
+        print('New buckets {fill size: count}: %s\nSingle buckets: %s' % (
+            str(many_buckets), str(few_buckets)))
         transaction.commit()
     else:
         conn = parent._p_jar
