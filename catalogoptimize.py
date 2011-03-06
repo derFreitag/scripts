@@ -15,29 +15,36 @@ from Products.ZCTextIndex.Lexicon import Lexicon
 from Products.ZCTextIndex.ZCTextIndex import ZCTextIndex
 
 
-def blen(bucket, readCurrent=None):
+def blen(bucket, track_objects=False):
     distribution = {}
+    objects = []
     while True:
         bucket_len = len(bucket)
         if distribution.get(bucket_len, None):
             distribution[bucket_len] += 1
         else:
             distribution[bucket_len] = 1
-        if readCurrent is not None:
-            readCurrent(bucket)
+        if track_objects:
+            objects.append(bucket)
         bucket = bucket._next
         if bucket is None:
             break
-    return distribution
+    return (distribution, objects)
 
 
 def optimize_tree(parent, k, v, attr=True):
+    transaction.begin()
     bucket = getattr(v, '_firstbucket', None)
     if bucket is None:
         return 0
     result = 0
     readCurrent = getattr(bucket._p_jar, 'readCurrent', None)
-    before = sum(blen(bucket, readCurrent).values())
+    if readCurrent is not None:
+        track_objects = True
+    else:
+        track_objects = False
+    before_distribution, objects = blen(bucket, track_objects=track_objects)
+    before = sum(before_distribution.values())
     klass = v.__class__
 
     # Fill the tree in a two-step process, which should result in better
@@ -69,9 +76,12 @@ def optimize_tree(parent, k, v, attr=True):
     # Verify data
     assert len(v) == len(new)
 
-    after_distribution = blen(new._firstbucket)
+    after_distribution, _ = blen(new._firstbucket)
     after = sum(after_distribution.values())
     if after < before:
+        if readCurrent is not None:
+            for obj in objects:
+                readCurrent(obj)
         if attr:
             setattr(parent, k, new)
         else:
@@ -92,6 +102,7 @@ def optimize_tree(parent, k, v, attr=True):
         conn = parent._p_jar
         if conn:
             conn.cacheGC()
+        transaction.abort()
     return result
 
 
