@@ -15,7 +15,7 @@ from Products.ZCTextIndex.Lexicon import Lexicon
 from Products.ZCTextIndex.ZCTextIndex import ZCTextIndex
 
 
-def blen(bucket):
+def blen(bucket, readCurrent=None):
     distribution = {}
     while True:
         bucket_len = len(bucket)
@@ -23,6 +23,8 @@ def blen(bucket):
             distribution[bucket_len] += 1
         else:
             distribution[bucket_len] = 1
+        if readCurrent is not None:
+            readCurrent(bucket)
         bucket = bucket._next
         if bucket is None:
             break
@@ -34,7 +36,8 @@ def optimize_tree(parent, k, v, attr=True):
     if bucket is None:
         return 0
     result = 0
-    before = sum(blen(bucket).values())
+    readCurrent = getattr(bucket._p_jar, 'readCurrent', None)
+    before = sum(blen(bucket, readCurrent).values())
     klass = v.__class__
 
     # Fill the tree in a two-step process, which should result in better
