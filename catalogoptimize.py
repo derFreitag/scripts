@@ -32,6 +32,39 @@ def blen(bucket, track_objects=False):
     return (distribution, objects)
 
 
+def new_tree(old_tree):
+    # Fill the tree in a two-step process, which should result in better
+    # fill rates
+    klass = old_tree.__class__
+    new = klass()
+    count = 0
+    tmp = []
+    if hasattr(old_tree, 'items'):
+        # BTree
+        for k, v in old_tree.items():
+            # We aim for 90% fill rate to avoid too many immediate splits
+            modcount = count % 9
+            if modcount % 2 == 0:
+                new[k] = v
+            else:
+                tmp.append((k, v))
+            count += 1
+    else:
+        # Tree set
+        for k in old_tree.keys():
+            if count % 2 == 0:
+                new.insert(k)
+            else:
+                tmp.append(k)
+            count += 1
+    # Add the rest of the data
+    new.update(tmp)
+
+    # Verify data
+    assert len(old_tree) == len(new)
+    return new
+
+
 def optimize_tree(parent, k, v, attr=True):
     transaction.begin()
     bucket = getattr(v, '_firstbucket', None)
@@ -45,36 +78,8 @@ def optimize_tree(parent, k, v, attr=True):
         track_objects = False
     before_distribution, objects = blen(bucket, track_objects=track_objects)
     before = sum(before_distribution.values())
-    klass = v.__class__
 
-    # Fill the tree in a two-step process, which should result in better
-    # fill rates
-    new = klass()
-    count = 0
-    tmp = []
-    if hasattr(v, 'items'):
-        # BTree
-        for kk,vv in v.items():
-            # We aim for 90% fill rate to avoid too many immediate splits
-            modcount = count % 9
-            if modcount % 2 == 0:
-                new[kk] = vv
-            else:
-                tmp.append((kk,vv))
-            count += 1
-    else:
-        # Tree set
-        for kk in v.keys():
-            if count % 2 == 0:
-                new.insert(kk)
-            else:
-                tmp.append(kk)
-            count += 1
-    # Add the rest of the data
-    new.update(tmp)
-
-    # Verify data
-    assert len(v) == len(new)
+    new = new_tree(v)
 
     after_distribution, _ = blen(new._firstbucket)
     after = sum(after_distribution.values())
