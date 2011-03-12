@@ -79,7 +79,7 @@ def optimize_tree(parent, k, v, attr=True):
 
     # do we have bucket lengths more than one which exist and aren't 90% full?
     # we assume here that 90% is one of 27, 54 or 108
-    unoptimized = any([k % 9 for k, v in before_distribution.items() if v > 1])
+    unoptimized = any([a % 9 for a, b in before_distribution.items() if b > 1])
 
     if unoptimized:
         new = new_tree(v)
