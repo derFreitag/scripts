@@ -70,45 +70,48 @@ def optimize_tree(parent, k, v, attr=True):
     bucket = getattr(v, '_firstbucket', None)
     if bucket is None:
         return 0
-    result = 0
     readCurrent = getattr(bucket._p_jar, 'readCurrent', None)
     if readCurrent is not None:
         track_objects = True
     else:
         track_objects = False
     before_distribution, objects = blen(bucket, track_objects=track_objects)
-    before = sum(before_distribution.values())
 
-    new = new_tree(v)
+    # do we have bucket lengths more than one which exist and aren't 90% full?
+    # we assume here that 90% is one of 27, 54 or 108
+    unoptimized = any([k % 9 for k, v in before_distribution.items() if v > 1])
 
-    after_distribution, _ = blen(new._firstbucket)
-    after = sum(after_distribution.values())
-    if after < before:
-        if readCurrent is not None:
-            for obj in objects:
-                readCurrent(obj)
-        if attr:
-            setattr(parent, k, new)
-        else:
-            parent[k] = new
-        parent._p_changed = True
-        result += before - after
-        many_buckets = {}
-        few_buckets = []
-        for k, v in after_distribution.items():
-            if v > 1:
-                many_buckets[k] = v
+    if unoptimized:
+        new = new_tree(v)
+        after_distribution, _ = blen(new._firstbucket)
+        after = sum(after_distribution.values())
+        before = sum(before_distribution.values())
+        if after < before:
+            if readCurrent is not None:
+                for obj in objects:
+                    readCurrent(obj)
+            if attr:
+                setattr(parent, k, new)
             else:
-                few_buckets.append(k)
-        print('New buckets {fill size: count}: %s\nSingle buckets: %s' % (
-            str(many_buckets), str(few_buckets)))
-        transaction.commit()
-    else:
-        conn = parent._p_jar
-        if conn:
-            conn.cacheGC()
-        transaction.abort()
-    return result
+                parent[k] = new
+            parent._p_changed = True
+            many_buckets = {}
+            few_buckets = []
+            for k, v in after_distribution.items():
+                if v > 1:
+                    many_buckets[k] = v
+                else:
+                    few_buckets.append(k)
+            print('New buckets {fill size: count}: %s\nSingle buckets: %s' % (
+                str(many_buckets), str(few_buckets)))
+            transaction.commit()
+            return before - after
+
+    conn = parent._p_jar
+    if conn:
+        conn.cacheGC()
+    transaction.abort()
+    return 0
 
 
 def optimize(obj, no_data=False):
