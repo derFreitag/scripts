@@ -6,6 +6,8 @@ Run this as a `zopectl run` script via for example:
 Note that it does actual transaction commits.
 """
 
+from datetime import datetime
+
 import transaction
 from Acquisition import aq_base
 from BTrees.IOBTree import IOBTree
@@ -139,13 +141,15 @@ for site in app.values():
         continue
 
     site_id = site.getId()
-    print('Starting catalog optimization for site "%s" ...' % site_id)
+    now = datetime.now().isoformat()
+    print('%s - Starting for site "%s" ...' % (now, site_id))
     combined = 0
     for zcatalog in site.values():
         if not isinstance(zcatalog, ZCatalog):
             continue
         zcatalog_id = zcatalog.getId()
-        print('Optimizing "%s"' % zcatalog_id)
+        now = datetime.now().isoformat()
+        print('%s - Optimizing "%s"' % (now, zcatalog_id))
         catalog = zcatalog._catalog
         # optimize paths, uids, data - skip data for portal_catalog
         combined += optimize(catalog, no_data=zcatalog_id == 'portal_catalog')
@@ -161,5 +165,5 @@ for site in app.values():
                 combined += optimize(index)
     print('Optimized away %s buckets for site "%s"' % (combined, site_id))
 
-print('Finishing...')
+print('%s - Finishing...', datetime.now().isoformat())
 transaction.commit()
