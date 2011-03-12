@@ -165,5 +165,5 @@ for site in app.values():
                 combined += optimize(index)
     print('Optimized away %s buckets for site "%s"' % (combined, site_id))
 
-print('%s - Finishing...', datetime.now().isoformat())
+print('%s - Finishing...' % datetime.now().isoformat())
 transaction.commit()
