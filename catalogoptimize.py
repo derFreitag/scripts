@@ -97,13 +97,13 @@ def new_tree(old_tree, modfactor=9):
     maxsize = get_max_bucket_size(new)
     maxkey = new.maxKey()
     if isinstance(maxkey, int):
-        synthetic = range(new.maxKey()+1, new.maxKey()+2+(maxsize-get_bucket_sizes(new._firstbucket)[-1]))
+        synthetic = range(maxkey+1, maxkey+2+(maxsize-get_bucket_sizes(new._firstbucket)[-1]))
     elif isinstance(maxkey, basestring):
         synthetic = [maxkey+str(x) for x in range((maxsize-get_bucket_sizes(new._firstbucket)[-1])+1)]
     else:
         synthetic = []
             
-    if hasattr(v, 'items'):
+    if hasattr(new, 'items'):
         for s in synthetic:
             new[s] = 0
         for s in synthetic:
@@ -133,33 +133,37 @@ def optimize_tree(parent, k, v, attr=True):
     else:
         track_objects = False
     before_distribution, objects = blen(bucket, track_objects=track_objects)
-    before = sum(before_distribution.values())
-
-    # Gather stats like max bucket size, average bucket size and median bucket size
-    maxsize = get_max_bucket_size(v)
-    averagesize = sum([kk*vv for kk,vv in before_distribution.items()])*1.0/before
-    bucketsizes = [x for sublist in [(kk,)*vv for kk,vv in sorted(before_distribution.items())] for x in sublist]
-    median = bucketsizes[before/2]
-
-    # Filling the tree in a two-step process. The first time we set up the tree,
-    # values are inserted sequentially, resulting in 50% fill rate.
-    # The second time we fill up with additional values to get fill rate higher
-    # than 50%.
-    # We want to set optimal fill rates based on current fill rate.
-    # Fill rates of 55% or below indicates sequential index like dateindex
-    # and we want 100% fill rate, otherwise 90% is good.
-    avgrate = float(averagesize)/maxsize
-    medianrate = float(median)/maxsize
-    if avgrate < 0.55 or medianrate < 0.55 or medianrate > 0.95:
-        modfactor = 2 # same number of items in both runs gives 100% fill
-    else:
-        modfactor = 9 # 5 in first run and 4 in second run gives 90% fill rate
 
     # do we have bucket lengths more than one which exist and aren't 90% full?
     # we assume here that 90% is one of 27, 54 or 108
-    unoptimized = any([a % 9 for a, b in before_distribution.items() if b > 1])
+    try:
+        unoptimized = any([a % 9 for a, b in before_distribution.items() if b > 1])
+    except NameError:
+        # Python 2.4 doesn't have any, we'll just loop over all items
+        unoptimized = bool([a % 9 for a, b in before_distribution.items() if b > 1])
 
     if unoptimized:
+        # Gather stats used to figure out modfactor
+        before = sum(before_distribution.values())
+        maxsize = get_max_bucket_size(v)
+        averagesize = sum([kk*vv for kk,vv in before_distribution.items()])*1.0/before
+        bucketsizes = [x for sublist in [(kk,)*vv for kk,vv in sorted(before_distribution.items())] for x in sublist]
+        median = bucketsizes[before/2]
+
+        # Filling the tree in a two-step process. The first time we set up the tree,
+        # values are inserted sequentially, resulting in 50% fill rate.
+        # The second time we fill up with additional values to get fill rate higher
+        # than 50%.
+        # We want to set optimal fill rates based on current fill rate.
+        # Fill rates of 55% or below indicates sequential index like dateindex
+        # and we want 100% fill rate, otherwise 90% is good.
+        avgrate = float(averagesize)/maxsize
+        medianrate = float(median)/maxsize
+        if avgrate < 0.55 or medianrate < 0.55 or medianrate > 0.95:
+            modfactor = 2 # same number of items in both runs gives 100% fill
+        else:
+            modfactor = 9 # 5 in first run and 4 in second run gives 90% fill rate
+
         new = new_tree(v, modfactor)
         after_distribution, _ = blen(new._firstbucket)
         after = sum(after_distribution.values())
@@ -179,8 +183,10 @@ def optimize_tree(parent, k, v, attr=True):
                     many_buckets[k] = v
                 else:
                     few_buckets.append(k)
-            print('New buckets {fill size: count}: %s\nSingle buckets: %s' % (
-                str(many_buckets), str(few_buckets)))
+            newaveragesize = sum([kk*vv for kk,vv in after_distribution.items()])*1.0/after
+            newavgrate = float(newaveragesize)/maxsize
+            print('New buckets {fill size: count}: %s\nSingle buckets: %s\nfill: before %.3f after %.3f' % (
+                str(many_buckets), str(few_buckets), avgrate, newavgrate))
             transaction.commit()
             return before - after
 
