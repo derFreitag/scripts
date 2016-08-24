@@ -1,0 +1,6 @@
+buildout.cfg
+versions.cfg
+var
+parts
+.installed.cfg
+fetchdata.sh
