@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Run this as a `zopectl run` script via for example:
 
