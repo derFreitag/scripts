@@ -169,30 +169,8 @@ class Tree(object):
             transaction.abort()
             return
 
-        # Gather stats used to figure out modfactor
-        before = sum(before_distribution.values())
-        maxsize = self.get_max_bucket_size(self.btree)
-        averagesize = sum([kk * vv for kk, vv in
-                           before_distribution.items()]) * 1.0 / before
-        bucketsizes = [x for sublist in [(kk,) * vv for kk, vv in
-                                         sorted(
-                                             before_distribution.items())]
-                       for x in sublist]
-        median = bucketsizes[before / 2]
-
-        # Filling the tree in a two-step process. The first time we set up the tree,
-        # values are inserted sequentially, resulting in 50% fill rate.
-        # The second time we fill up with additional values to get fill rate higher
-        # than 50%.
-        # We want to set optimal fill rates based on current fill rate.
-        # Fill rates of 55% or below indicates sequential index like dateindex
-        # and we want 100% fill rate, otherwise 90% is good.
-        avgrate = float(averagesize) / maxsize
-        medianrate = float(median) / maxsize
-        if avgrate < 0.55 or medianrate < 0.55 or medianrate > 0.95:
-            modfactor = 2  # same number of items in both runs gives 100% fill
-        else:
-            modfactor = 9  # 5 in first run and 4 in second run gives 90% fill rate
+        stats = self.gather_stats(before_distribution)
+        before, maxsize, avgrate, modfactor = stats
 
         new = self.new_tree(self.btree, modfactor)
         after_distribution, _ = self.blen(new._firstbucket)
@@ -240,6 +218,46 @@ class Tree(object):
                 if b > 1
             ]
         )
+
+    def gather_stats(self, before_distribution):
+        # Gather stats used to figure out modfactor
+        before = sum(before_distribution.values())
+        maxsize = self.get_max_bucket_size(self.btree)
+        totalsize = sum(
+            [
+                kk * vv
+                for kk, vv in
+                before_distribution.items()
+            ]
+        )
+        averagesize = float(totalsize) / before
+        bucketsizes = [
+            x
+            for sublist in
+            [
+                (kk,) * vv
+                for kk, vv in sorted(before_distribution.items())
+            ]
+            for x in sublist
+        ]
+        median = bucketsizes[before / 2]
+
+        # Filling the tree in a two-step process.
+        # The first time we set up the tree,
+        # values are inserted sequentially, resulting in 50% fill rate.
+        # The second time we fill up with additional values to get fill
+        # rate higher than 50%.
+        # We want to set optimal fill rates based on current fill rate.
+        # Fill rates of 55% or below indicates sequential index like dateindex
+        # and we want 100% fill rate, otherwise 90% is good.
+        avgrate = float(averagesize) / maxsize
+        medianrate = float(median) / maxsize
+
+        modfactor = 9  # 5 in first run and 4 in second run gives 90% fill rate
+        if avgrate < 0.55 or medianrate < 0.55 or medianrate > 0.95:
+            modfactor = 2  # same number of items in both runs gives 100% fill
+
+        return before, maxsize, avgrate, modfactor
 
     def blen(self, bucket, track_objects=False):
         distribution = defaultdict(int)
