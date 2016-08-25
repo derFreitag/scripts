@@ -272,23 +272,6 @@ class Tree(object):
                 break
         return distribution, objects
 
-    def get_max_bucket_size(self, data):
-        # Data is tree or treeset.
-        # We calculate instead of hardcoding because values can be patched.
-        tmp = data.__class__()
-        if hasattr(tmp, 'items'):
-            update = lambda x: (x, x)
-        else:
-            update = lambda x: x
-        count = 0
-        tmp.update([update(count)])
-        bucket = tmp._firstbucket
-        while bucket._next is None:
-            count += 1
-            tmp.update([update(count)])
-        # Buckets are split on count
-        return count
-
     def new_tree(self, old_tree, modfactor=9):
         # Fill the tree in a two-step process, which should result in better
         # fill rates
@@ -351,6 +334,23 @@ class Tree(object):
         # Verify data
         assert len(old_tree) == len(new)
         return new
+
+    def get_max_bucket_size(self, data):
+        # Data is tree or treeset.
+        # We calculate instead of hardcoding because values can be patched.
+        tmp = data.__class__()
+        if hasattr(tmp, 'items'):
+            update = lambda x: (x, x)
+        else:
+            update = lambda x: x
+        count = 0
+        tmp.update([update(count)])
+        bucket = tmp._firstbucket
+        while bucket._next is None:
+            count += 1
+            tmp.update([update(count)])
+        # Buckets are split on count
+        return count
 
     def get_bucket_sizes(self, bucket):
         sizes = []
