@@ -279,11 +279,12 @@ class Tree(object):
         new = klass()
         count = 0
         tmp = []
-        # If the last bucket is not 50% full after first run (it is fuller), it is likely
-        # to split on second run, and the last 3 buckets will have lower fill rates,
+        # If the last bucket is not 50% full after first run (it is fuller),
+        # it is likely to split on second run,
+        # and the last 3 buckets will have lower fill rates,
         # instead of just the last one.
-        # Idea: keep the tmp the same size as max and start on 2nd run inbetween 1st run
-        # but with a max size delay
+        # Idea: keep the tmp the same size as max and start on 2nd run
+        # inbetween 1st run but with a max size delay
         if hasattr(old_tree, 'items'):
             # BTree
             for k, v in old_tree.items():
