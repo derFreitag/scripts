@@ -222,9 +222,15 @@ class Tree(object):
                                   after_distribution.items()]) * 1.0 / after
             newavgrate = float(newaveragesize) / maxsize
             print(
-            'New buckets {fill size: count}: %s\nSingle buckets: %s\nfill: before %.3f after %.3f' % (
-                str(many_buckets), str(few_buckets), avgrate,
-                newavgrate))
+                'New buckets {{fill size: count}}: {0}\n'
+                'Single buckets: {1}\n'
+                'fill: before {2:.3f} after {3:.3f}'.format(
+                    str(many_buckets),
+                    str(few_buckets),
+                    avgrate,
+                    newavgrate,
+                )
+            )
             transaction.commit()
             self.combined = before - after
 
