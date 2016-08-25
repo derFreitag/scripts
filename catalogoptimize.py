@@ -162,17 +162,7 @@ class Tree(object):
             track_objects=self.track_objects,
         )
 
-        # do we have bucket lengths more than one which exist and aren't 90% full?
-        # we assume here that 90% is one of 27, 54 or 108
-        try:
-            unoptimized = any(
-                [a % 9 for a, b in before_distribution.items() if b > 1])
-        except NameError:
-            # Python 2.4 doesn't have any, we'll just loop over all items
-            unoptimized = bool(
-                [a % 9 for a, b in before_distribution.items() if b > 1])
-
-        if not unoptimized:
+        if self.is_optimized(before_distribution):
             conn = self.parent._p_jar
             if conn:
                 conn.cacheGC()
@@ -238,6 +228,18 @@ class Tree(object):
             )
             transaction.commit()
             self.combined = before - after
+
+    def is_optimized(self, before_distribution):
+        # do we have bucket lengths more than one which exist and aren't
+        # 90% full?
+        # we assume here that 90% is one of 27, 54 or 108
+        return not any(
+            [
+                a % 9
+                for a, b in before_distribution.items()
+                if b > 1
+            ]
+        )
 
     def blen(self, bucket, track_objects=False):
         distribution = defaultdict(int)
