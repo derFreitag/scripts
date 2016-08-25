@@ -26,6 +26,12 @@ class Plone(object):
         self.site_id = site.getId()
 
     @classmethod
+    def get_sites(cls, app):
+        for obj in app.values():
+            if Plone.is_site(obj):
+                yield obj
+
+    @classmethod
     def is_site(cls, site_obj):
         return site_obj.meta_type == 'Plone Site'
 
@@ -33,11 +39,10 @@ class Plone(object):
         now = datetime.now().isoformat()
         print('{0} - Starting for site "{1}" ...'.format(now, self.site_id))
 
-        for zcatalog_obj in self.site.values():
-            if PloneCatalog.is_zcatalog(zcatalog_obj):
-                catalog = PloneCatalog(zcatalog_obj)
-                catalog.optimize()
-                self.combined += catalog.combined
+        for zcatalog_obj in PloneCatalog.get_catalogs(self.site):
+            catalog = PloneCatalog(zcatalog_obj)
+            catalog.optimize()
+            self.combined += catalog.combined
 
         print(
             'Optimized away {0} buckets for site "{1}"'.format(
@@ -57,7 +62,13 @@ class PloneCatalog(object):
         self.catalog = zcatalog._catalog
 
     @classmethod
-    def is_zcatalog(self, zcatalog_obj):
+    def get_catalogs(cls, site):
+        for obj in site.values():
+            if PloneCatalog.is_zcatalog(obj):
+                yield obj
+
+    @classmethod
+    def is_zcatalog(cls, zcatalog_obj):
         return isinstance(zcatalog_obj, ZCatalog)
 
     def optimize(self):
