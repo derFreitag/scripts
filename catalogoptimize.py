@@ -137,15 +137,15 @@ class Tree(object):
 
     combined = 0
 
-    def __init__(self, parent, key, value, attributes=True):
+    def __init__(self, parent, key, btree, attributes=True):
         self.parent = parent
         self.key = key
-        self.value = value
+        self.btree = btree
         self.attributes = attributes
 
     def optimize(self):
         transaction.begin()
-        bucket = getattr(self.value, '_firstbucket', None)
+        bucket = getattr(self.btree, '_firstbucket', None)
         if bucket is None:
             return
 
@@ -176,7 +176,7 @@ class Tree(object):
 
         # Gather stats used to figure out modfactor
         before = sum(before_distribution.values())
-        maxsize = self.get_max_bucket_size(self.value)
+        maxsize = self.get_max_bucket_size(self.btree)
         averagesize = sum([kk * vv for kk, vv in
                            before_distribution.items()]) * 1.0 / before
         bucketsizes = [x for sublist in [(kk,) * vv for kk, vv in
@@ -199,7 +199,7 @@ class Tree(object):
         else:
             modfactor = 9  # 5 in first run and 4 in second run gives 90% fill rate
 
-        new = self.new_tree(self.value, modfactor)
+        new = self.new_tree(self.btree, modfactor)
         after_distribution, _ = self.blen(new._firstbucket)
         after = sum(after_distribution.values())
         if after < before:
