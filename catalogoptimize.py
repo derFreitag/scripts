@@ -142,20 +142,25 @@ class Tree(object):
         self.key = key
         self.btree = btree
         self.attributes = attributes
+        self.bucket = self.get_first_bucket()
+        self.readCurrent = self.get_readCurrent_method()
+        self.track_objects = bool(self.readCurrent)
+
+    def get_first_bucket(self):
+        return getattr(self.btree, '_firstbucket', None)
+
+    def get_readCurrent_method(self):
+        return getattr(self.bucket._p_jar, 'readCurrent', None)
 
     def optimize(self):
         transaction.begin()
-        bucket = getattr(self.btree, '_firstbucket', None)
-        if bucket is None:
+        if self.bucket is None:
             return
 
-        readCurrent = getattr(bucket._p_jar, 'readCurrent', None)
-        if readCurrent is not None:
-            track_objects = True
-        else:
-            track_objects = False
-        before_distribution, objects = self.blen(bucket,
-                                            track_objects=track_objects)
+        before_distribution, objects = self.blen(
+            self.bucket,
+            track_objects=self.track_objects,
+        )
 
         # do we have bucket lengths more than one which exist and aren't 90% full?
         # we assume here that 90% is one of 27, 54 or 108
@@ -203,9 +208,9 @@ class Tree(object):
         after_distribution, _ = self.blen(new._firstbucket)
         after = sum(after_distribution.values())
         if after < before:
-            if readCurrent is not None:
+            if self.readCurrent is not None:
                 for obj in objects:
-                    readCurrent(obj)
+                    self.readCurrent(obj)
             if self.attributes:
                 setattr(self.parent, self.key, new)
             else:
