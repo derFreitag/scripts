@@ -157,7 +157,7 @@ class Tree(object):
         if self.bucket is None:
             return
 
-        before_distribution, objects = self.blen(
+        before_distribution, objects = self.get_btree_information(
             self.bucket,
             track_objects=self.track_objects,
         )
@@ -173,7 +173,7 @@ class Tree(object):
         before, maxsize, avgrate, modfactor = stats
 
         new = self.new_tree(self.btree, modfactor)
-        after_distribution, _ = self.blen(new._firstbucket)
+        after_distribution, _ = self.get_btree_information(new._firstbucket)
         after = sum(after_distribution.values())
         if after < before:
             if self.readCurrent is not None:
@@ -259,7 +259,7 @@ class Tree(object):
 
         return before, maxsize, avgrate, modfactor
 
-    def blen(self, bucket, track_objects=False):
+    def get_btree_information(self, bucket, track_objects=False):
         distribution = defaultdict(int)
         objects = []
         while True:
