@@ -17,6 +17,15 @@ from Products.ZCTextIndex.ZCTextIndex import ZCTextIndex
 import transaction
 
 
+def main(app):
+    for site in Plone.get_sites(app):
+        plone = Plone(site)
+        plone.optimize()
+
+    print('{0} - Finishing...'.format(datetime.now().isoformat()))
+    transaction.commit()
+
+
 class Plone(object):
 
     combined = 0
@@ -322,15 +331,5 @@ class Tree(object):
         return sizes
 
 
-###
-# main
-###
-
-# Loop over all Plone sites
-for site_obj in app.values():
-    if Plone.is_site(site_obj):
-        plone = Plone(site_obj)
-        plone.optimize()
-
-print('{0} - Finishing...'.format(datetime.now().isoformat()))
-transaction.commit()
+if __name__ == '__main__':
+    main(app)
