@@ -9,6 +9,7 @@ Note that it does actual transaction commits.
 from Acquisition import aq_base
 from BTrees.IOBTree import IOBTree
 from BTrees.OOBTree import OOBTree
+from collections import defaultdict
 from datetime import datetime
 from Products.ZCatalog.ZCatalog import ZCatalog
 from Products.ZCTextIndex.Lexicon import Lexicon
@@ -228,14 +229,11 @@ class Tree(object):
             self.combined = before - after
 
     def blen(self, bucket, track_objects=False):
-        distribution = {}
+        distribution = defaultdict(int)
         objects = []
         while True:
             bucket_len = len(bucket)
-            if distribution.get(bucket_len, None):
-                distribution[bucket_len] += 1
-            else:
-                distribution[bucket_len] = 1
+            distribution[bucket_len] += 1
             if track_objects:
                 objects.append(bucket)
             bucket = bucket._next
