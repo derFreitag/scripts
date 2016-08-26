@@ -15,21 +15,124 @@ from Products.ZCatalog.ZCatalog import ZCatalog
 from Products.ZCTextIndex.Lexicon import Lexicon
 from Products.ZCTextIndex.ZCTextIndex import ZCTextIndex
 
+import sys
 import transaction
 
 
-def main(app):
-    for site in Plone.get_sites(app):
-        plone = Plone(site)
-        plone.optimize()
+class Main(object):
 
-    print('{0} - Finishing...'.format(datetime.now().isoformat()))
-    transaction.commit()
+    plone_sites = []
+    catalogs = []
+
+    plone_site_filter = None
+    catalog_filter = None
+    index_filter = None
+
+    def __init__(self, app):
+        self.app = app
+        self.set_filtering()
+
+    def set_filtering(self):
+        script_position = sys.argv.index('catalogoptimize.py')
+        filters = sys.argv[script_position + 1:]
+
+        try:
+            self.plone_site_filter = filters[0]
+            self.catalog_filter = filters[1]
+            self.index_filter = filters[2]
+        except IndexError:
+            pass
+
+    def run(self):
+        self.gather_catalogs()
+        self.optimize_catalogs()
+        self.debug('Finishing...')
+        transaction.commit()
+
+    def gather_catalogs(self):
+        self.debug('Gathering information', header=True)
+        self.debug_filter_information()
+        self.get_plone_sites()
+        self.debug_info_about_plone_sites()
+        self.get_catalogs_on_plone_sites()
+
+    def debug_filter_information(self):
+        if not self.plone_site_filter:
+            return
+        self.debug(
+            'Filters set for website: {0} catalog: {1} index: {2}'.format(
+                self.plone_site_filter,
+                self.catalog_filter,
+                self.index_filter,
+            )
+        )
+
+    def get_plone_sites(self):
+        plone_sites = [Plone(p) for p in Plone.get_sites(self.app)]
+        if self.plone_site_filter:
+            plone_sites = [
+                p
+                for p in plone_sites
+                if p.site_id == self.plone_site_filter
+            ]
+        self.plone_sites = plone_sites
+
+    def debug_info_about_plone_sites(self):
+        site_ids = [p.site_id for p in self.plone_sites]
+        self.debug(
+            'Found {0} plone sites: {1}'.format(
+                len(self.plone_sites),
+                site_ids,
+            )
+        )
+
+    def get_catalogs_on_plone_sites(self):
+        catalogs = []
+        for plone in self.plone_sites:
+            self.debug('Plone {0}'.format(plone.site_id))
+
+            tmp_catalogs = [
+                PloneCatalog(c, index_filter=self.index_filter)
+                for c in
+                plone.get_catalogs()
+            ]
+            if self.catalog_filter:
+                tmp_catalogs = [
+                    c
+                    for c in tmp_catalogs
+                    if c.zcatalog_id == self.catalog_filter
+                ]
+            catalogs += tmp_catalogs
+            self.debug_info_about_catalogs(plone, tmp_catalogs)
+
+        self.catalogs = catalogs
+
+    def debug_info_about_catalogs(self, plone, catalogs):
+        catalog_ids = [c.zcatalog_id for c in catalogs]
+        self.debug(
+            'Plone {0} found {1} catalogs: {2}'.format(
+                plone.site_id,
+                len(catalogs),
+                catalog_ids,
+            )
+        )
+
+    def optimize_catalogs(self):
+        self.debug('Optimizing', header=True)
+        for catalog in self.catalogs:
+            catalog.optimize()
+
+    @staticmethod
+    def debug(msg, header=False):
+        if not header:
+            print('{0} - {1}'.format(datetime.now().isoformat(), msg))
+            return
+        print('------- ' * 3)
+        print(msg)
+        print('------- ' * 3)
 
 
 class Plone(object):
-
-    combined = 0
 
     def __init__(self, site):
         self.site = site
@@ -45,97 +148,133 @@ class Plone(object):
     def is_site(cls, site_obj):
         return site_obj.meta_type == 'Plone Site'
 
-    def optimize(self):
-        now = datetime.now().isoformat()
-        print('{0} - Starting for site "{1}" ...'.format(now, self.site_id))
-
-        for zcatalog_obj in PloneCatalog.get_catalogs(self.site):
-            catalog = PloneCatalog(zcatalog_obj)
-            catalog.optimize()
-            self.combined += catalog.combined
-
-        print(
-            'Optimized away {0} buckets for site "{1}"'.format(
-                self.combined,
-                self.site_id,
-            )
-        )
+    def get_catalogs(self):
+        for obj in self.site.values():
+            if PloneCatalog.is_zcatalog(obj):
+                yield obj
 
 
 class PloneCatalog(object):
 
-    combined = 0
+    tree_batch_size = 50000
 
-    def __init__(self, zcatalog):
+    def __init__(self, zcatalog, index_filter=None):
         self.zcatalog = zcatalog
         self.zcatalog_id = zcatalog.getId()
         self.catalog = zcatalog._catalog
-
-    @classmethod
-    def get_catalogs(cls, site):
-        for obj in site.values():
-            if PloneCatalog.is_zcatalog(obj):
-                yield obj
+        self.index_filter = index_filter
 
     @classmethod
     def is_zcatalog(cls, zcatalog_obj):
         return isinstance(zcatalog_obj, ZCatalog)
 
     def optimize(self):
-        now = datetime.now().isoformat()
-        print('%s - Optimizing "%s"' % (now, self.zcatalog_id))
+        for obj in self.get_objects_to_optimize():
+            for batch, processed in self.get_trees_in_object_batched(obj):
+                result = 0
+                for index, tree in enumerate(batch):
+                    result += tree.optimize()
+                self.debug(
+                    'Optimized away {0} buckets on {1} trees'.format(
+                        result,
+                        processed,
+                    )
+                )
 
-        self.optimize_structure()
-        self.optimize_lexica()
-        self.optimize_indexes()
+    def get_objects_to_optimize(self):
+        objs = []
+        if not self.index_filter:
+            objs.append(self.catalog)
+            objs += self._get_lexicons()
 
-    def optimize_structure(self):
-        # optimize paths, uids, data - skip data for portal_catalog
-        is_portal_catalog = self.zcatalog_id == 'portal_catalog'
-        self.optimize_global_object(
-            obj=self.catalog,
-            no_data=is_portal_catalog
+        objs += self._get_indexes()
+        self._debug_objects_to_optimize(objs)
+        return objs
+
+    def _debug_objects_to_optimize(self, objects_to_optimize):
+        self.debug(
+            '{0} objects to optimize in {1}'.format(
+                len(objects_to_optimize),
+                self.zcatalog_id,
+            )
         )
 
-    def optimize_lexica(self):
-        for obj in self.zcatalog.values():
-            if isinstance(obj, Lexicon):
-                self.optimize_global_object(obj)
+    def _get_lexicons(self):
+        lexicons = [
+            l
+            for l in self.zcatalog.values()
+            if isinstance(l, Lexicon)
+        ]
+        return lexicons
 
-    def optimize_indexes(self):
-        for index in self.catalog.indexes.values():
+    def _get_indexes(self):
+        indexes = []
+        indexes_ids = self.catalog.indexes.keys()
+        if self.index_filter:
+            position = indexes_ids.index(self.index_filter)
+            indexes_ids = indexes_ids[position:]
+
+        for index_id in indexes_ids:
+            index = self.catalog.indexes[index_id]
             if isinstance(index, ZCTextIndex):
-                self.optimize_global_object(index.index)
+                indexes.append(index.index)
             else:
-                self.optimize_global_object(index)
+                indexes.append(index)
+        return indexes
 
-    def optimize_global_object(self, obj, no_data=False):
+    def get_trees_in_object_batched(self, obj):
+        total_trees = 0
+        trees = []
+        obj_id = obj.id
+        no_data = False
+        if self.zcatalog_id == 'portal_catalog':
+            no_data = True
+
         obj = aq_base(obj)
-        result = 0
         obj._p_activate()
+        self.debug('-- Trees in {0} : {1}'.format(obj_id, len(obj.__dict__) ))
         for key, value in obj.__dict__.items():
             if no_data and key == 'data':
                 # data blows up memory too much
                 continue
+
             tree = Tree(obj, key, value)
-            tree.optimize()
-            result += tree.combined
+            trees.append(tree)
+            total_trees += 1
+            if self.has_to_process_batch(trees):
+                yield trees, total_trees
+                trees = []
+
             # handle sets inside *OBTrees
             if isinstance(value, (IOBTree, OOBTree)):
                 obj._p_activate()
                 new_value = obj.__dict__[key]
+                self.debug(
+                    '--- Get trees in {0} {1}: {2}'.format(
+                        obj_id,
+                        key,
+                        len(new_value),
+                    )
+                )
                 for key2, value2 in new_value.iteritems():
                     tree = Tree(new_value, key2, value2, attributes=False)
-                    tree.optimize()
-                    result += tree.combined
+                    trees.append(tree)
+                    total_trees += 1
+                    if self.has_to_process_batch(trees):
+                        yield trees, total_trees
+                        trees = []
+        yield trees
 
-        print('Optimized away {0} buckets in {1}'.format(result, obj))
-        self.combined += result
+    def has_to_process_batch(self, batch):
+        count = len(batch)
+        return count > 1 and count % self.tree_batch_size == 0
+
+    @staticmethod
+    def debug(msg):
+        print('{0} - {1}'.format(datetime.now().isoformat(), msg))
 
 
 class Tree(object):
-
-    combined = 0
 
     def __init__(self, parent, key, btree, attributes=True):
         self.parent = parent
@@ -150,12 +289,14 @@ class Tree(object):
         return getattr(self.btree, '_firstbucket', None)
 
     def get_readCurrent_method(self):
-        return getattr(self.bucket._p_jar, 'readCurrent', None)
+        if self.bucket:
+            return getattr(self.bucket._p_jar, 'readCurrent', None)
+        return None
 
     def optimize(self):
         transaction.begin()
         if self.bucket is None:
-            return
+            return 0
 
         before_distribution, objects = self.get_btree_information(
             self.bucket,
@@ -167,7 +308,7 @@ class Tree(object):
             if conn:
                 conn.cacheGC()
             transaction.abort()
-            return
+            return 0
 
         stats = self.gather_stats(before_distribution)
         before, maxsize, avgrate, modfactor = stats
@@ -205,7 +346,9 @@ class Tree(object):
                 )
             )
             transaction.commit()
-            self.combined = before - after
+            return before - after
+
+        return 0
 
     def is_optimized(self, before_distribution):
         # do we have bucket lengths more than one which exist and aren't
@@ -362,4 +505,5 @@ class Tree(object):
 
 
 if __name__ == '__main__':
-    main(app)
+    main = Main(app)
+    main.run()
